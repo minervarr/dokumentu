@@ -1,9 +1,6 @@
 package io.nava.dokumentu.app;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
-
 import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
@@ -35,8 +32,6 @@ public class MainActivity extends AppCompatActivity {
     private ActivityMainBinding binding;
     private TextView statusText;
     private Button selectFileButton;
-    private RecyclerView csvRecyclerView;
-    private CSVTableAdapter csvAdapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,21 +43,13 @@ public class MainActivity extends AppCompatActivity {
         initializeViews();
         setupClickListeners();
 
-        // Initialize with native library test
+        // Initialize with welcome message
         statusText.setText(stringFromJNI());
     }
 
     private void initializeViews() {
         statusText = binding.sampleText;
         selectFileButton = binding.selectFileButton;
-        csvRecyclerView = binding.csvRecyclerView;
-
-        // Setup RecyclerView
-        csvRecyclerView.setLayoutManager(new LinearLayoutManager(this));
-        csvRecyclerView.setHasFixedSize(true);
-
-        // Initially hide the RecyclerView
-        csvRecyclerView.setVisibility(View.GONE);
     }
 
     private void setupClickListeners() {
@@ -75,7 +62,7 @@ public class MainActivity extends AppCompatActivity {
         intent.addCategory(Intent.CATEGORY_OPENABLE);
 
         // Add MIME types for CSV files
-        String[] mimeTypes = {"text/csv", "text/comma-separated-values", "application/csv"};
+        String[] mimeTypes = {"text/csv", "text/comma-separated-values", "application/csv", "text/plain"};
         intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
 
         try {
@@ -100,14 +87,18 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void processSelectedFile(Uri uri) {
-        statusText.setText(getString(R.string.loading));
+        statusText.setText(getString(R.string.processing_file));
+        selectFileButton.setEnabled(false);
 
         try {
+            // Get file name from URI
+            String fileName = getFileNameFromUri(uri);
+
             // Copy URI content to a temporary file that native code can access
             String tempFilePath = copyUriToTempFile(uri);
 
             if (tempFilePath != null) {
-                processCSVFile(tempFilePath);
+                launchCSVViewer(tempFilePath, fileName);
             } else {
                 showError("Failed to access file");
             }
@@ -115,7 +106,27 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             Log.e(TAG, "Error processing file", e);
             showError("Error processing file: " + e.getMessage());
+        } finally {
+            // Re-enable button and reset status
+            selectFileButton.setEnabled(true);
+            statusText.setText(getString(R.string.csv_viewer));
         }
+    }
+
+    private String getFileNameFromUri(Uri uri) {
+        String fileName = "Unknown";
+        try {
+            if (uri.getLastPathSegment() != null) {
+                fileName = uri.getLastPathSegment();
+                // Clean up the filename
+                if (fileName.contains(":")) {
+                    fileName = fileName.substring(fileName.lastIndexOf(":") + 1);
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Could not get filename from URI", e);
+        }
+        return fileName;
     }
 
     private String copyUriToTempFile(Uri uri) {
@@ -146,55 +157,50 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void processCSVFile(String filePath) {
-        Log.d(TAG, "Loading CSV file: " + filePath);
+    private void launchCSVViewer(String filePath, String fileName) {
+        // Pre-load the CSV file to check if it's valid
+        boolean loaded = CSVDataBridge.loadCSVFile(filePath);
 
-        boolean success = loadCSVFile(filePath);
-
-        if (success) {
-            displayCSVData();
+        if (loaded) {
+            Intent intent = new Intent(this, CSVViewerActivity.class);
+            intent.putExtra(CSVViewerActivity.EXTRA_FILE_PATH, filePath);
+            intent.putExtra(CSVViewerActivity.EXTRA_FILE_NAME, fileName);
+            startActivity(intent);
         } else {
-            showError(getString(R.string.error_loading_file));
-        }
-    }
-
-    private void displayCSVData() {
-        String[] headers = getCSVHeaders();
-        int rowCount = getRowCount();
-        int columnCount = getColumnCount();
-
-        Log.d(TAG, "CSV loaded - Rows: " + rowCount + ", Columns: " + columnCount);
-
-        if (headers != null && headers.length > 0) {
-            // Update status text
-            String status = getString(R.string.file_loaded_successfully) + "\n" +
-                    getString(R.string.rows_count, rowCount) + "\n" +
-                    getString(R.string.columns_count, columnCount);
-            statusText.setText(status);
-
-            // Setup and show the RecyclerView
-            csvAdapter = new CSVTableAdapter(this, headers, rowCount);
-            csvRecyclerView.setAdapter(csvAdapter);
-            csvRecyclerView.setVisibility(View.VISIBLE);
-
-            Toast.makeText(this, getString(R.string.file_loaded_successfully), Toast.LENGTH_SHORT).show();
-        } else {
-            showError("No data found in CSV file");
+            showError("Failed to load CSV file. Please check the file format.");
         }
     }
 
     private void showError(String message) {
         statusText.setText(message);
-        csvRecyclerView.setVisibility(View.GONE);
         Toast.makeText(this, message, Toast.LENGTH_LONG).show();
     }
 
-    // Native method declarations
+    // Native method declarations (kept for backward compatibility with CSVTableAdapter)
     public native String stringFromJNI();
-    public native boolean loadCSVFile(String filePath);
-    public native String[] getCSVHeaders();
-    public native String[] getCSVRow(int rowIndex);
-    public native int getRowCount();
-    public native int getColumnCount();
-    public native String getCellValue(int rowIndex, int columnIndex);
+
+    // These methods now delegate to CSVDataBridge for consistency
+    public boolean loadCSVFile(String filePath) {
+        return CSVDataBridge.loadCSVFile(filePath);
+    }
+
+    public String[] getCSVHeaders() {
+        return CSVDataBridge.getCSVHeaders();
+    }
+
+    public String[] getCSVRow(int rowIndex) {
+        return CSVDataBridge.getCSVRow(rowIndex);
+    }
+
+    public int getRowCount() {
+        return CSVDataBridge.getRowCount();
+    }
+
+    public int getColumnCount() {
+        return CSVDataBridge.getColumnCount();
+    }
+
+    public String getCellValue(int rowIndex, int columnIndex) {
+        return CSVDataBridge.getCellValue(rowIndex, columnIndex);
+    }
 }
