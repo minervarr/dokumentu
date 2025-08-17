@@ -1,3 +1,12 @@
 <resources>
     <string name="app_name">dokumentu</string>
+    <string name="select_csv_file">Select CSV File</string>
+    <string name="loading">Loading&#8230;</string>
+    <string name="error_loading_file">Error loading file</string>
+    <string name="no_file_selected">No file selected</string>
+    <string name="file_loaded_successfully">File loaded successfully</string>
+    <string name="rows_count">Rows: %1$d</string>
+    <string name="columns_count">Columns: %1$d</string>
+    <string name="csv_viewer">CSV Viewer</string>
+    <string name="open_file">Open File</string>
 </resources>
